@@ -1,44 +1,117 @@
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { Link, router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   GestureResponderEvent,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 
 import {
   Book,
-  deleteBook,
+  GetBooksParams,
+  SortField,
   getBooks,
   updateBook,
 } from "../services/BooksService";
 
+type FilterRead = "tous" | "lus" | "non lus";
+
+const SORT_OPTIONS: { value: SortField; label: string }[] = [
+  { value: "title", label: "Titre" },
+  { value: "author", label: "Auteur" },
+  { value: "theme", label: "Theme" },
+  { value: "year", label: "Annee" },
+  { value: "rating", label: "Note" },
+];
+
 export default function Index() {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [filterRead, setFilterRead] = useState<FilterRead>("tous");
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [selectedTheme, setSelectedTheme] = useState<"tous" | string>("tous");
+  const [availableThemes, setAvailableThemes] = useState<string[]>([]);
+  const [sort, setSort] = useState<SortField>("title");
+  const [order, setOrder] = useState<"asc" | "desc">("asc");
+
+  const queryParams = useMemo<GetBooksParams>(() => {
+    return {
+      query: search.trim() ? search.trim() : undefined,
+      read:
+        filterRead === "tous" ? undefined : filterRead === "lus" ? true : false,
+      favorite: onlyFavorites ? true : undefined,
+      theme: selectedTheme !== "tous" ? selectedTheme : undefined,
+      sort,
+      order,
+    };
+  }, [filterRead, onlyFavorites, order, search, selectedTheme, sort]);
 
   const loadBooks = useCallback(async () => {
     try {
-      const data = await getBooks();
+      setLoading(true);
+      const data = await getBooks(queryParams);
       setBooks(data);
+      setAvailableThemes((prev) => {
+        const combined = new Set(prev);
+        data.forEach((item) => {
+          if (item.theme) {
+            combined.add(item.theme);
+          }
+        });
+        const next = Array.from(combined).sort((a, b) =>
+          a.localeCompare(b, "fr")
+        );
+        if (
+          next.length === prev.length &&
+          next.every((value, index) => value === prev[index])
+        ) {
+          return prev;
+        }
+        return next;
+      });
     } catch (error) {
       console.error(error);
       Alert.alert("Erreur", (error as Error).message);
     } finally {
       setLoading(false);
+      setInitialLoading(false);
     }
-  }, []);
+  }, [queryParams]);
 
   useFocusEffect(
     useCallback(() => {
       loadBooks();
     }, [loadBooks])
   );
+
+  const filtersReadyRef = useRef(false);
+
+  useEffect(() => {
+    if (filtersReadyRef.current) {
+      loadBooks();
+    } else {
+      filtersReadyRef.current = true;
+    }
+  }, [loadBooks]);
+
+  useEffect(() => {
+    if (!status) {
+      return;
+    }
+    const timer = setTimeout(() => setStatus(null), 3000);
+    return () => clearTimeout(timer);
+  }, [status]);
 
   const handleToggleRead = useCallback(
     async (book: Book) => {
@@ -50,14 +123,16 @@ export default function Index() {
           year: book.year ?? undefined,
           read: !book.read,
           favorite: book.favorite ?? false,
+          rating: book.rating ?? null,
+          cover: book.cover ?? null,
         });
         setBooks((prev) =>
           prev.map((item) => (item.id === book.id ? updated : item))
         );
         setStatus(
           book.read
-            ? `Livre marqué comme non lu : ${book.name}`
-            : `Livre marqué comme lu : ${book.name}`
+            ? `Livre marque comme non lu : ${book.name}`
+            : `Livre marque comme lu : ${book.name}`
         );
       } catch (error) {
         console.error(error);
@@ -77,14 +152,16 @@ export default function Index() {
           year: book.year ?? undefined,
           read: book.read ?? false,
           favorite: !book.favorite,
+          rating: book.rating ?? null,
+          cover: book.cover ?? null,
         });
         setBooks((prev) =>
           prev.map((item) => (item.id === book.id ? updated : item))
         );
         setStatus(
           !book.favorite
-            ? `Livre ajouté aux favoris : ${book.name}`
-            : `Livre retiré des favoris : ${book.name}`
+            ? `Livre ajoute aux favoris : ${book.name}`
+            : `Livre retire des favoris : ${book.name}`
         );
       } catch (error) {
         console.error(error);
@@ -94,109 +171,292 @@ export default function Index() {
     []
   );
 
-  const handleDelete = useCallback(async (book: Book) => {
-    try {
-      await deleteBook(book.id);
-      setBooks((prev) => prev.filter((item) => item.id !== book.id));
-      setStatus(`Livre supprimé : ${book.name}`);
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Erreur", (error as Error).message);
-    }
-  }, []);
+  const handleRate = useCallback(
+    async (book: Book, rating: number) => {
+      const bounded = Math.min(Math.max(Math.round(rating), 1), 5);
+      try {
+        const updated = await updateBook(book.id, {
+          name: book.name,
+          author: book.author,
+          editor: book.editor,
+          year: book.year ?? undefined,
+          read: book.read ?? false,
+          favorite: book.favorite ?? false,
+          rating: bounded,
+          cover: book.cover ?? null,
+        });
+        setBooks((prev) =>
+          prev.map((item) => (item.id === book.id ? updated : item))
+        );
+        setStatus(
+          `Note mise a jour : ${bounded} etoile(s) pour ${book.name}`
+        );
+      } catch (error) {
+        console.error(error);
+        Alert.alert("Erreur", (error as Error).message);
+      }
+    },
+    []
+  );
+
+  const renderStars = useCallback(
+    (book: Book) => {
+      const current = book.rating ?? 0;
+      return (
+        <View style={styles.starsWrapper}>
+          <View style={styles.starsRow}>
+            {Array.from({ length: 5 }).map((_, index) => {
+              const starValue = index + 1;
+              const filled = starValue <= current;
+              return (
+                <Pressable
+                  key={starValue}
+                  onPress={(event: GestureResponderEvent) => {
+                    event.stopPropagation();
+                    handleRate(book, starValue);
+                  }}
+                  hitSlop={8}
+                  accessibilityLabel={`Attribuer ${starValue} etoile${
+                    starValue > 1 ? "s" : ""
+                  }`}
+                >
+                  <Ionicons
+                    name={filled ? "star" : "star-outline"}
+                    size={20}
+                    color={filled ? "#f97316" : "#cbd5f5"}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      );
+    },
+    [handleRate]
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: Book }) => (
       <Pressable
         onPress={() => router.push(`/books/${item.id}`)}
         style={({ pressed }) => [
-          styles.book,
-          pressed ? styles.bookPressed : null,
+          styles.bookCard,
+          pressed ? styles.bookCardPressed : null,
         ]}
       >
-        <View style={styles.bookHeader}>
-          <Text style={styles.bookTitle}>{item.name}</Text>
-          <View style={styles.badgeRow}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{item.name}</Text>
+          <View style={styles.cardActions}>
             <Pressable
               onPress={(event: GestureResponderEvent) => {
                 event.stopPropagation();
                 handleToggleFavorite(item);
               }}
-              hitSlop={10}
+              hitSlop={8}
+              accessibilityLabel={
+                item.favorite
+                  ? `Retirer ${item.name} des favoris`
+                  : `Ajouter ${item.name} aux favoris`
+              }
+            >
+              <Ionicons
+                name={item.favorite ? "heart" : "heart-outline"}
+                size={20}
+                color={item.favorite ? "#dc2626" : "#94a3b8"}
+              />
+            </Pressable>
+            <Pressable
+              onPress={(event: GestureResponderEvent) => {
+                event.stopPropagation();
+                handleToggleRead(item);
+              }}
+              style={({ pressed }) => [
+                styles.readBadge,
+                item.read ? styles.readBadgeActive : styles.readBadgeInactive,
+                pressed ? styles.readBadgePressed : null,
+              ]}
+              hitSlop={8}
+              accessibilityLabel={
+                item.read
+                  ? `Marquer ${item.name} comme non lu`
+                  : `Marquer ${item.name} comme lu`
+              }
+            >
+              <MaterialIcons
+                name={item.read ? "check-circle" : "radio-button-unchecked"}
+                size={16}
+                color={item.read ? "#047857" : "#4b5563"}
+              />
+              <Text style={styles.readBadgeText}>
+                {item.read ? "Lu" : "A lire"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+        <Text style={styles.cardMeta}>Auteur : {item.author}</Text>
+        {item.editor ? (
+          <Text style={styles.cardMeta}>Editeur : {item.editor}</Text>
+        ) : null}
+        {item.year ? (
+          <Text style={styles.cardMeta}>Publication : {item.year}</Text>
+        ) : null}
+        {item.theme ? (
+          <Text style={styles.cardMeta}>Theme : {item.theme}</Text>
+        ) : null}
+        {renderStars(item)}
+      </Pressable>
+    ),
+    [handleToggleFavorite, handleToggleRead, renderStars]
+  );
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.topBar}>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}><Ionicons
+                name="book"
+                size={28}
+                color="#2563eb"
+              /> Livres</Text>
+          <Link href="/books/new" asChild>
+            <Pressable style={styles.addButton}>
+              <Text style={styles.addButtonText}>Ajouter</Text>
+            </Pressable>
+          </Link>
+        </View>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Rechercher par titre ou auteur"
+          placeholderTextColor="#94a3b8"
+          style={styles.searchInput}
+        />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScrollContent}
+        >
+          {(["tous", "lus", "non lus"] as const).map((value) => (
+            <Pressable
+              key={value}
+              onPress={() => setFilterRead(value)}
+              style={[
+                styles.filterChip,
+                filterRead === value ? styles.filterChipActive : null,
+              ]}
             >
               <Text
                 style={[
-                  styles.heart,
-                  item.favorite ? styles.heartFilled : styles.heartOutline,
+                  styles.filterChipText,
+                  filterRead === value ? styles.filterChipTextActive : null,
                 ]}
               >
-                {item.favorite ? "♥" : "♡"}
+                {value === "tous"
+                  ? "Tous"
+                  : value === "lus"
+                  ? "Deja lus"
+                  : "A lire"}
               </Text>
             </Pressable>
-            <Text style={styles.badge}>{item.read ? "Lu" : "Non Lu"}</Text>
-          </View>
-        </View>
-        <Text style={styles.bookMeta}>Auteur · {item.author}</Text>
-        {item.editor ? (
-          <Text style={styles.bookMeta}>Éditeur · {item.editor}</Text>
-        ) : null}
-        {item.year ? (
-          <Text style={styles.bookMeta}>Publication · {item.year}</Text>
-        ) : null}
-        <View style={styles.row}>
+          ))}
           <Pressable
-            onPress={() => handleToggleRead(item)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.secondaryAction,
-              pressed ? styles.actionPressed : null,
+            onPress={() => setOnlyFavorites((prev) => !prev)}
+            style={[
+              styles.filterChip,
+              onlyFavorites ? styles.filterChipActive : null,
             ]}
           >
-            <Text style={styles.actionText}>
-              Marquer comme {item.read ? "non lu" : "lu"}
+            <Text
+              style={[
+                styles.filterChipText,
+                onlyFavorites ? styles.filterChipTextActive : null,
+              ]}
+            >
+              Favoris
             </Text>
           </Pressable>
+        </ScrollView>
+        {loading && !initialLoading ? (
+          <View style={styles.inlineLoader}>
+            <ActivityIndicator size="small" color="#2563eb" />
+            <Text style={styles.inlineLoaderText}>Mise a jour...</Text>
+          </View>
+        ) : null}
+        {availableThemes.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipScrollContent}
+          >
+            {["tous", ...availableThemes].map((value) => (
+              <Pressable
+                key={value}
+                onPress={() => setSelectedTheme(value)}
+                style={[
+                  styles.filterChip,
+                  selectedTheme === value ? styles.filterChipActive : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedTheme === value ? styles.filterChipTextActive : null,
+                  ]}
+                >
+                  {value === "tous" ? "Tous les themes" : value}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+        <View style={styles.sortHeader}>
           <Pressable
-            onPress={() => handleDelete(item)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.dangerAction,
-              pressed ? styles.actionPressed : null,
+            onPress={() => setOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+            style={[
+              styles.orderButton,
+              order === "desc" ? styles.orderButtonActive : null,
             ]}
           >
-            <Text style={styles.actionText}>Supprimer</Text>
+            <MaterialIcons
+              name={order === "asc" ? "arrow-upward" : "arrow-downward"}
+              size={16}
+              color={order === "desc" ? "#fff" : "#1f2937"}
+            />
+            <Text
+              style={[
+                styles.orderButtonText,
+                order === "desc" ? styles.orderButtonTextActive : null,
+              ]}
+            >
+              {order === "asc" ? "Ordre croissant" : "Ordre decroissant"}
+            </Text>
           </Pressable>
         </View>
-      </Pressable>
-    ),
-    [handleDelete, handleToggleFavorite, handleToggleRead]
-  );
-
-  useEffect(() => {
-    if (!status) {
-      return;
-    }
-    const timer = setTimeout(() => setStatus(null), 3000);
-    return () => clearTimeout(timer);
-  }, [status]);
-
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.loadingText}>Chargement des livres...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Livres</Text>
-        <Link href="/books/new" asChild>
-          <Pressable style={styles.addButton}>
-            <Text style={styles.addButtonText}>Ajouter</Text>
-          </Pressable>
-        </Link>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScrollContent}
+        >
+          {SORT_OPTIONS.map(({ value, label }) => (
+            <Pressable
+              key={value}
+              onPress={() => setSort(value)}
+              style={[
+                styles.sortButton,
+                sort === value ? styles.sortButtonActive : null,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.sortButtonText,
+                  sort === value ? styles.sortButtonTextActive : null,
+                ]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
       <FlatList
         data={books}
@@ -207,12 +467,18 @@ export default function Index() {
         }
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Aucun livre pour le moment</Text>
-            <Text style={styles.emptySubtitle}>
-              Ajoutez votre première lecture pour commencer.
-            </Text>
-          </View>
+          initialLoading ? (
+            <View style={styles.emptyContent}>
+              <ActivityIndicator size="large" color="#2563eb" />
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>Aucun livre</Text>
+              <Text style={styles.emptySubtitle}>
+                Ajustez vos filtres ou ajoutez un nouveau livre pour commencer.
+              </Text>
+            </View>
+          )
         }
       />
       {status ? (
@@ -225,134 +491,205 @@ export default function Index() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 24,
     backgroundColor: "#f5f6fb",
   },
-  header: {
+  topBar: {
+    padding: 20,
+    paddingBottom: 12,
+    gap: 16,
+  },
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 20,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: "#1f2933",
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#111827",
   },
   addButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 999,
     backgroundColor: "#2563eb",
   },
   addButtonText: {
     color: "#fff",
     fontWeight: "600",
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: "#d4d4d8",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
     fontSize: 15,
   },
-  book: {
+  chipScrollContent: {
+    gap: 12,
+    paddingVertical: 4,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 18,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+  },
+  filterChipActive: {
+    backgroundColor: "#1d4ed8",
+    borderColor: "#1d4ed8",
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+  filterChipTextActive: {
+    color: "#fff",
+  },
+  inlineLoader: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
-  bookPressed: {
-    transform: [{ scale: 0.99 }],
-    opacity: 0.95,
+  inlineLoaderText: {
+    fontSize: 13,
+    color: "#475569",
   },
-  bookHeader: {
+  sortHeader: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  orderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#fff",
+  },
+  orderButtonActive: {
+    backgroundColor: "#1d4ed8",
+    borderColor: "#1d4ed8",
+  },
+  orderButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+  orderButtonTextActive: {
+    color: "#fff",
+  },
+  sortButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#fff",
+  },
+  sortButtonActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  sortButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+  sortButtonTextActive: {
+    color: "#fff",
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    gap: 12,
+  },
+  bookCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  bookCardPressed: {
+    opacity: 0.9,
+  },
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  badgeRow: {
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+    flex: 1,
+    paddingRight: 12,
+  },
+  cardActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  bookTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#111827",
-  },
-  bookMeta: {
+  cardMeta: {
     fontSize: 14,
     color: "#4b5563",
   },
-  row: {
+  readBadge: {
     flexDirection: "row",
-    marginTop: 8,
-    gap: 12,
-  },
-  badge: {
-    backgroundColor: "#e0e7ff",
-    color: "#4338ca",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
+  },
+  readBadgeActive: {
+    backgroundColor: "#dcfce7",
+  },
+  readBadgeInactive: {
+    backgroundColor: "#e5e7eb",
+  },
+  readBadgePressed: {
+    opacity: 0.85,
+  },
+  readBadgeText: {
     fontSize: 12,
-    fontWeight: "600",
-  },
-  heart: {
-    fontSize: 20,
-  },
-  heartFilled: {
-    color: "#dc2626",
-  },
-  heartOutline: {
-    color: "#9ca3af",
-  },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  secondaryAction: {
-    backgroundColor: "#eef2ff",
-  },
-  dangerAction: {
-    backgroundColor: "#fee2e2",
-  },
-  actionPressed: {
-    opacity: 0.8,
-  },
-  actionText: {
-    fontSize: 14,
     fontWeight: "600",
     color: "#1f2937",
   },
-  listContent: {
-    paddingBottom: 32,
-    gap: 16,
+  starsWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 4,
+  },
+  starsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  separator: {
+    height: 12,
   },
   emptyContent: {
     flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 32,
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: "#f5f6fb",
-  },
-  loadingText: {
-    fontSize: 16,
-    color: "#475569",
-  },
-  separator: {
-    height: 12,
   },
   emptyState: {
     alignItems: "center",

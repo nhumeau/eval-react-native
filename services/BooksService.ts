@@ -9,7 +9,7 @@ export type Book = {
   favorite?: boolean;
   theme?: string;
   rating?: number | null;
-  description?: string;
+  cover?: string | null;
 };
 
 export type BookPayload = {
@@ -19,6 +19,8 @@ export type BookPayload = {
   year?: number | null;
   read?: boolean;
   favorite?: boolean;
+  rating?: number | null;
+  cover?: string | null;
 };
 
 export type Note = {
@@ -26,6 +28,18 @@ export type Note = {
   bookId: string;
   content: string;
   dateISO: string;
+};
+
+export type SortField = "title" | "author" | "theme" | "year" | "rating";
+export type SortOrder = "asc" | "desc";
+
+export type GetBooksParams = {
+  query?: string;
+  read?: boolean | null;
+  favorite?: boolean | null;
+  theme?: string;
+  sort?: SortField;
+  order?: SortOrder;
 };
 
 const API_URL = "https://api-books-kycs.onrender.com";
@@ -68,8 +82,36 @@ async function safeParseError(response: Response) {
   }
 }
 
-export async function getBooks() {
-  return request<Book[]>("/books");
+function buildQuery(params?: GetBooksParams) {
+  if (!params) {
+    return "";
+  }
+  const query = new URLSearchParams();
+  if (params.query) {
+    query.set("q", params.query);
+  }
+  if (typeof params.read === "boolean") {
+    query.set("read", String(params.read));
+  }
+  if (typeof params.favorite === "boolean") {
+    query.set("favorite", String(params.favorite));
+  }
+  if (params.theme) {
+    query.set("theme", params.theme);
+  }
+  if (params.sort) {
+    query.set("sort", params.sort);
+  }
+  if (params.order) {
+    query.set("order", params.order);
+  }
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export async function getBooks(params?: GetBooksParams) {
+  const query = buildQuery(params);
+  return request<Book[]>(`/books${query}`);
 }
 
 export async function getBook(id: string) {
@@ -127,4 +169,14 @@ export async function addBookNote(bookId: string, content: string) {
     body: JSON.stringify({ content }),
   });
   return mapNote(note);
+}
+
+export async function deleteBookNote(bookId: string, noteId: string) {
+  return request<undefined>(
+    `/books/${bookId}/notes/${noteId}`,
+    {
+      method: "DELETE",
+    },
+    false
+  );
 }

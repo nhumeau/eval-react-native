@@ -1,7 +1,10 @@
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  GestureResponderEvent,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +18,7 @@ import {
   Note,
   addBookNote,
   deleteBook,
+  deleteBookNote,
   getBook,
   getBookNotes,
   updateBook,
@@ -68,32 +72,6 @@ export default function BookDetails() {
     return () => clearTimeout(timer);
   }, [status]);
 
-  const handleToggleRead = useCallback(async () => {
-    if (!book) {
-      return;
-    }
-
-    try {
-      const updated = await updateBook(book.id, {
-        name: book.name,
-        author: book.author,
-        editor: book.editor,
-        year: book.year ?? undefined,
-        read: !book.read,
-        favorite: book.favorite ?? false,
-      });
-      setBook(updated);
-      setStatus(
-        book.read
-          ? `Livre marqué comme non lu : ${book.name}`
-          : `Livre marqué comme lu : ${book.name}`
-      );
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Erreur", (error as Error).message);
-    }
-  }, [book]);
-
   const handleToggleFavorite = useCallback(async () => {
     if (!book) {
       return;
@@ -107,12 +85,42 @@ export default function BookDetails() {
         year: book.year ?? undefined,
         read: book.read ?? false,
         favorite: !book.favorite,
+        rating: book.rating ?? null,
+        cover: book.cover ?? null,
       });
       setBook(updated);
       setStatus(
         !book.favorite
-          ? `Livre ajouté aux favoris : ${book.name}`
-          : `Livre retiré des favoris : ${book.name}`
+          ? `Livre ajoute aux favoris : ${book.name}`
+          : `Livre retire des favoris : ${book.name}`
+      );
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Erreur", (error as Error).message);
+    }
+  }, [book]);
+
+  const handleToggleRead = useCallback(async () => {
+    if (!book) {
+      return;
+    }
+
+    try {
+      const updated = await updateBook(book.id, {
+        name: book.name,
+        author: book.author,
+        editor: book.editor,
+        year: book.year ?? undefined,
+        read: !book.read,
+        favorite: book.favorite ?? false,
+        rating: book.rating ?? null,
+        cover: book.cover ?? null,
+      });
+      setBook(updated);
+      setStatus(
+        book.read
+          ? `Livre marque comme non lu : ${book.name}`
+          : `Livre marque comme lu : ${book.name}`
       );
     } catch (error) {
       console.error(error);
@@ -127,7 +135,7 @@ export default function BookDetails() {
 
     Alert.alert(
       "Supprimer le livre",
-      `Êtes-vous sûr de vouloir supprimer « ${book.name} » ?`,
+      `Etes-vous sur de vouloir supprimer ${book.name} ?`,
       [
         { text: "Annuler", style: "cancel" },
         {
@@ -136,7 +144,7 @@ export default function BookDetails() {
           onPress: async () => {
             try {
               await deleteBook(book.id);
-              setStatus(`Livre supprimé : ${book.name}`);
+              setStatus(`Livre supprime : ${book.name}`);
               router.replace("/");
             } catch (error) {
               console.error(error);
@@ -147,6 +155,74 @@ export default function BookDetails() {
       ]
     );
   }, [book]);
+
+  const handleRate = useCallback(
+    async (rating: number) => {
+      if (!book) {
+        return;
+      }
+      const boundedRating = Math.round(rating);
+      if (boundedRating < 1 || boundedRating > 5) {
+        return;
+      }
+      try {
+        const updated = await updateBook(book.id, {
+          name: book.name,
+          author: book.author,
+          editor: book.editor,
+          year: book.year ?? undefined,
+          read: book.read ?? false,
+          favorite: book.favorite ?? false,
+          rating: boundedRating,
+          cover: book.cover ?? null,
+        });
+        setBook(updated);
+        setStatus(
+          `Note mise a jour : ${boundedRating} etoile(s) pour ${book.name}`
+        );
+      } catch (error) {
+        console.error(error);
+        Alert.alert("Erreur", (error as Error).message);
+      }
+    },
+    [book]
+  );
+
+  const renderStars = useCallback(() => {
+    if (!book) {
+      return null;
+    }
+    const current = book.rating ?? 0;
+    return (
+      <View style={styles.starsWrapper}>
+        <View style={styles.starsRow}>
+          {Array.from({ length: 5 }).map((_, index) => {
+            const starValue = index + 1;
+            const filled = starValue <= current;
+            return (
+              <Pressable
+                key={starValue}
+                onPress={(event: GestureResponderEvent) => {
+                  event.stopPropagation();
+                  handleRate(starValue);
+                }}
+                hitSlop={8}
+                accessibilityLabel={`Attribuer ${starValue} etoile${
+                  starValue > 1 ? "s" : ""
+                }`}
+              >
+                <Ionicons
+                  name={filled ? "star" : "star-outline"}
+                  size={22}
+                  color={filled ? "#f97316" : "#cbd5f5"}
+                />
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }, [book, handleRate]);
 
   const handleAddNote = useCallback(async () => {
     if (!book || !bookId) {
@@ -162,7 +238,7 @@ export default function BookDetails() {
       const created = await addBookNote(bookId, trimmed);
       setNotes((prev) => [created, ...prev]);
       setNoteContent("");
-      setStatus("Note ajoutée avec succès.");
+      setStatus("Note ajoutee avec succes.");
     } catch (error) {
       console.error(error);
       Alert.alert("Erreur", (error as Error).message);
@@ -170,6 +246,32 @@ export default function BookDetails() {
       setNoteSubmitting(false);
     }
   }, [book, bookId, noteContent]);
+
+  const handleDeleteNote = useCallback(
+    (noteId: string) => {
+      if (!book) {
+        return;
+      }
+      Alert.alert("Supprimer la note", "Confirmer la suppression de cette note ?", [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteBookNote(book.id, noteId);
+              setNotes((prev) => prev.filter((note) => note.id !== noteId));
+              setStatus("Note supprimee.");
+            } catch (error) {
+              console.error(error);
+              Alert.alert("Erreur", (error as Error).message);
+            }
+          },
+        },
+      ]);
+    },
+    [book]
+  );
 
   const formattedNotes = useMemo(
     () =>
@@ -204,71 +306,70 @@ export default function BookDetails() {
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.card}>
-          <View style={styles.headerRow}>
-            <Text style={styles.title}>{book.name}</Text>
-            <Pressable onPress={handleToggleFavorite} hitSlop={10}>
-              <Text
-                style={[
-                  styles.heart,
-                  book.favorite ? styles.heartFilled : styles.heartOutline,
-                ]}
-              >
-                {book.favorite ? "♥" : "♡"}
-              </Text>
-            </Pressable>
+          <View style={styles.headerSection}>
+            <View style={styles.coverContainer}>
+              {book.cover ? (
+                <Image source={{ uri: book.cover }} style={styles.cover} />
+              ) : (
+                <View style={styles.coverPlaceholder}>
+                  <Text style={styles.coverPlaceholderText}>Aucune photo</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.infoColumn}>
+              <View style={styles.titleBlock}>
+                <Text style={styles.title}>{book.name}</Text>
+                <View style={styles.quickActions}>
+                  <Pressable
+                    onPress={handleToggleFavorite}
+                    hitSlop={10}
+                    accessibilityLabel={
+                      book.favorite
+                        ? `Retirer ${book.name} des favoris`
+                        : `Ajouter ${book.name} aux favoris`
+                    }
+                  >
+                    <Ionicons
+                      name={book.favorite ? "heart" : "heart-outline"}
+                      size={24}
+                      color={book.favorite ? "#dc2626" : "#9ca3af"}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={handleToggleRead}
+                    style={({ pressed }) => [
+                      styles.readStatus,
+                      book.read ? styles.readStatusRead : styles.readStatusUnread,
+                      pressed ? styles.readStatusPressed : null,
+                    ]}
+                    hitSlop={10}
+                    accessibilityLabel={
+                      book.read
+                        ? `Marquer ${book.name} comme non lu`
+                        : `Marquer ${book.name} comme lu`
+                    }
+                  >
+                    <MaterialIcons
+                      name={book.read ? "check-circle" : "radio-button-unchecked"}
+                      size={18}
+                      color={book.read ? "#047857" : "#4b5563"}
+                    />
+                    <Text style={styles.readStatusText}>
+                      {book.read ? "Lu" : "A lire"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+              {renderStars()}
+              <Text style={styles.meta}>Auteur : {book.author}</Text>
+              {book.editor ? (
+                <Text style={styles.meta}>Editeur : {book.editor}</Text>
+              ) : null}
+              {book.year ? (
+                <Text style={styles.meta}>Publication : {book.year}</Text>
+              ) : null}
+            </View>
           </View>
-          <Text style={styles.meta}>Auteur · {book.author}</Text>
-          {book.editor ? (
-            <Text style={styles.meta}>Éditeur · {book.editor}</Text>
-          ) : null}
-          {book.year ? (
-            <Text style={styles.meta}>Publication · {book.year}</Text>
-          ) : null}
-          <Text style={styles.meta}>
-            Statut · {book.read ? "lu" : "non lu"}
-          </Text>
-          {book.description ? (
-            <Text style={styles.description}>{book.description}</Text>
-          ) : (
-            <Text style={styles.description}>
-              Aucune description fournie pour ce livre.
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.actions}>
-          <Pressable
-            onPress={handleToggleRead}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.primaryAction,
-              pressed ? styles.actionPressed : null,
-            ]}
-          >
-            <Text style={styles.primaryText}>
-              Marquer comme {book.read ? "non lu" : "lu"}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => router.push(`/books/${book.id}/edit`)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.secondaryAction,
-              pressed ? styles.actionPressed : null,
-            ]}
-          >
-            <Text style={styles.secondaryText}>Modifier</Text>
-          </Pressable>
-          <Pressable
-            onPress={handleDelete}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.dangerAction,
-              pressed ? styles.actionPressed : null,
-            ]}
-          >
-            <Text style={styles.dangerText}>Supprimer</Text>
-          </Pressable>
         </View>
 
         <View style={styles.notesCard}>
@@ -278,7 +379,20 @@ export default function BookDetails() {
           ) : (
             formattedNotes.map((note) => (
               <View style={styles.note} key={note.id}>
-                <Text style={styles.noteDate}>{note.formattedDate}</Text>
+                <View style={styles.noteHeader}>
+                  <Text style={styles.noteDate}>{note.formattedDate}</Text>
+                  <Pressable
+                    onPress={() => handleDeleteNote(note.id)}
+                    hitSlop={8}
+                    style={({ pressed }) => [
+                      styles.noteDeleteButton,
+                      pressed ? styles.noteDeletePressed : null,
+                    ]}
+                    accessibilityLabel="Supprimer la note"
+                  >
+                    <MaterialIcons name="delete-outline" size={16} color="#b91c1c" />
+                  </Pressable>
+                </View>
                 <Text style={styles.noteContent}>{note.content}</Text>
               </View>
             ))
@@ -287,7 +401,7 @@ export default function BookDetails() {
             <TextInput
               value={noteContent}
               onChangeText={setNoteContent}
-              placeholder="Ajouter une note (max 250 caractères)"
+              placeholder="Ajouter une note (max 250 caracteres)"
               placeholderTextColor="#94a3b8"
               style={styles.noteInput}
               multiline
@@ -307,6 +421,35 @@ export default function BookDetails() {
               </Text>
             </Pressable>
           </View>
+        </View>
+
+        <View style={styles.actions}>
+          <Pressable
+            onPress={() => router.push(`/books/${book.id}/edit`)}
+            style={({ pressed }) => [
+              styles.actionButton,
+              styles.secondaryAction,
+              pressed ? styles.actionPressed : null,
+            ]}
+          >
+            <View style={styles.actionContent}>
+              <MaterialIcons name="edit" size={18} color="#1f2937" />
+              <Text style={styles.secondaryText}>Modifier</Text>
+            </View>
+          </Pressable>
+          <Pressable
+            onPress={handleDelete}
+            style={({ pressed }) => [
+              styles.actionButton,
+              styles.dangerAction,
+              pressed ? styles.actionPressed : null,
+            ]}
+          >
+            <View style={styles.actionContent}>
+              <MaterialIcons name="delete-outline" size={18} color="#b91c1c" />
+              <Text style={styles.dangerText}>Supprimer</Text>
+            </View>
+          </Pressable>
         </View>
       </ScrollView>
       {status ? (
@@ -336,37 +479,92 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 8 },
     elevation: 3,
-    gap: 10,
+    gap: 12,
   },
-  headerRow: {
-    flexDirection: "row",
+  headerSection: {
+    flexDirection: "column",
+    gap: 16,
+  },
+  coverContainer: {
     alignItems: "center",
-    justifyContent: "space-between",
+    alignSelf: "center",
+  },
+  cover: {
+    width: 110,
+    height: 150,
+    borderRadius: 12,
+    backgroundColor: "#e2e8f0",
+  },
+  coverPlaceholder: {
+    width: 110,
+    height: 150,
+    borderRadius: 12,
+    backgroundColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  coverPlaceholderText: {
+    color: "#475569",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  infoColumn: {
+    flex: 1,
+    gap: 10,
+    alignSelf: "stretch",
+  },
+  titleBlock: {
+    gap: 12,
   },
   title: {
     fontSize: 26,
     fontWeight: "700",
     color: "#111827",
-    flex: 1,
-    paddingRight: 16,
+    flexShrink: 1,
+  },
+  quickActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    alignSelf: "flex-start",
+  },
+  starsWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginTop: 4,
+  },
+  starsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   meta: {
     fontSize: 15,
     color: "#475569",
   },
-  description: {
-    fontSize: 15,
-    color: "#4b5563",
-    lineHeight: 22,
+  readStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
-  heart: {
-    fontSize: 28,
+  readStatusRead: {
+    backgroundColor: "#dcfce7",
   },
-  heartFilled: {
-    color: "#dc2626",
+  readStatusUnread: {
+    backgroundColor: "#e2e8f0",
   },
-  heartOutline: {
-    color: "#cbd5f5",
+  readStatusPressed: {
+    opacity: 0.85,
+  },
+  readStatusText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1f2937",
   },
   actions: {
     gap: 12,
@@ -375,17 +573,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
+    backgroundColor: "#fff",
   },
   actionPressed: {
     opacity: 0.85,
   },
-  primaryAction: {
-    backgroundColor: "#2563eb",
-  },
-  primaryText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 15,
+  actionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   secondaryAction: {
     backgroundColor: "#fff",
@@ -433,6 +629,11 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#f8fafc",
   },
+  noteHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   noteDate: {
     fontSize: 12,
     fontWeight: "600",
@@ -441,6 +642,13 @@ const styles = StyleSheet.create({
   noteContent: {
     fontSize: 15,
     color: "#1f2937",
+  },
+  noteDeleteButton: {
+    padding: 4,
+    borderRadius: 12,
+  },
+  noteDeletePressed: {
+    opacity: 0.6,
   },
   noteComposer: {
     gap: 12,
