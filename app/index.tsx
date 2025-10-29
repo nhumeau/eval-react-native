@@ -1,8 +1,9 @@
 import { Link, router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
+  GestureResponderEvent,
   Pressable,
   StyleSheet,
   Text,
@@ -19,6 +20,7 @@ import {
 export default function Index() {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<string | null>(null);
 
   const loadBooks = useCallback(async () => {
     try {
@@ -47,9 +49,42 @@ export default function Index() {
           editor: book.editor,
           year: book.year ?? undefined,
           read: !book.read,
+          favorite: book.favorite ?? false,
         });
         setBooks((prev) =>
           prev.map((item) => (item.id === book.id ? updated : item))
+        );
+        setStatus(
+          book.read
+            ? `Livre marqué comme non lu : ${book.name}`
+            : `Livre marqué comme lu : ${book.name}`
+        );
+      } catch (error) {
+        console.error(error);
+        Alert.alert("Erreur", (error as Error).message);
+      }
+    },
+    []
+  );
+
+  const handleToggleFavorite = useCallback(
+    async (book: Book) => {
+      try {
+        const updated = await updateBook(book.id, {
+          name: book.name,
+          author: book.author,
+          editor: book.editor,
+          year: book.year ?? undefined,
+          read: book.read ?? false,
+          favorite: !book.favorite,
+        });
+        setBooks((prev) =>
+          prev.map((item) => (item.id === book.id ? updated : item))
+        );
+        setStatus(
+          !book.favorite
+            ? `Livre ajouté aux favoris : ${book.name}`
+            : `Livre retiré des favoris : ${book.name}`
         );
       } catch (error) {
         console.error(error);
@@ -63,6 +98,7 @@ export default function Index() {
     try {
       await deleteBook(book.id);
       setBooks((prev) => prev.filter((item) => item.id !== book.id));
+      setStatus(`Livre supprimé : ${book.name}`);
     } catch (error) {
       console.error(error);
       Alert.alert("Erreur", (error as Error).message);
@@ -80,7 +116,25 @@ export default function Index() {
       >
         <View style={styles.bookHeader}>
           <Text style={styles.bookTitle}>{item.name}</Text>
-          <Text style={styles.badge}>{item.read ? "Lu" : "À lire"}</Text>
+          <View style={styles.badgeRow}>
+            <Pressable
+              onPress={(event: GestureResponderEvent) => {
+                event.stopPropagation();
+                handleToggleFavorite(item);
+              }}
+              hitSlop={10}
+            >
+              <Text
+                style={[
+                  styles.heart,
+                  item.favorite ? styles.heartFilled : styles.heartOutline,
+                ]}
+              >
+                {item.favorite ? "♥" : "♡"}
+              </Text>
+            </Pressable>
+            <Text style={styles.badge}>{item.read ? "Lu" : "Non Lu"}</Text>
+          </View>
         </View>
         <Text style={styles.bookMeta}>Auteur · {item.author}</Text>
         {item.editor ? (
@@ -115,8 +169,16 @@ export default function Index() {
         </View>
       </Pressable>
     ),
-    [handleDelete, handleToggleRead]
+    [handleDelete, handleToggleFavorite, handleToggleRead]
   );
+
+  useEffect(() => {
+    if (!status) {
+      return;
+    }
+    const timer = setTimeout(() => setStatus(null), 3000);
+    return () => clearTimeout(timer);
+  }, [status]);
 
   if (loading) {
     return (
@@ -153,6 +215,11 @@ export default function Index() {
           </View>
         }
       />
+      {status ? (
+        <View style={styles.statusBanner}>
+          <Text style={styles.statusText}>{status}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -206,6 +273,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
   bookTitle: {
     fontSize: 18,
     fontWeight: "600",
@@ -228,6 +300,15 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     fontSize: 12,
     fontWeight: "600",
+  },
+  heart: {
+    fontSize: 20,
+  },
+  heartFilled: {
+    color: "#dc2626",
+  },
+  heartOutline: {
+    color: "#9ca3af",
   },
   actionButton: {
     flex: 1,
@@ -286,5 +367,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6b7280",
     textAlign: "center",
+  },
+  statusBanner: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: "#1d4ed8",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  statusText: {
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "600",
   },
 });

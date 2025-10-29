@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -16,6 +16,7 @@ type BookFormProps = {
   onSubmit: (values: BookPayload) => Promise<void> | void;
   submitting?: boolean;
   submitLabel: string;
+  children?: ReactNode;
 };
 
 type FormError = {
@@ -29,14 +30,16 @@ export function BookForm({
   onSubmit,
   submitLabel,
   submitting = false,
+  children,
 }: BookFormProps) {
   const [name, setName] = useState(initialValues?.name ?? "");
   const [author, setAuthor] = useState(initialValues?.author ?? "");
-  const [publisher, setPublisher] = useState(initialValues?.editor ?? "");
+  const [editor, setEditor] = useState(initialValues?.editor ?? "");
   const [yearText, setYearText] = useState(() =>
     initialValues?.year ? String(initialValues.year) : ""
   );
   const [read, setRead] = useState(initialValues?.read ?? false);
+  const [favorite, setFavorite] = useState(initialValues?.favorite ?? false);
   const [errors, setErrors] = useState<FormError>({});
 
   const canSubmit = useMemo(() => {
@@ -75,9 +78,10 @@ export function BookForm({
     const payload: BookPayload = {
       name: trimmedName,
       author: trimmedAuthor,
-      editor: publisher.trim() ? publisher.trim() : undefined,
+      editor: editor.trim() ? editor.trim() : undefined,
       year: parsedYear,
       read,
+      favorite,
     };
 
     onSubmit(payload);
@@ -121,8 +125,8 @@ export function BookForm({
         <View style={styles.field}>
           <Text style={styles.label}>Éditeur</Text>
           <TextInput
-            value={publisher}
-            onChangeText={setPublisher}
+            value={editor}
+            onChangeText={setEditor}
             style={styles.input}
             placeholder="Maison d'édition"
             placeholderTextColor="#94a3b8"
@@ -148,7 +152,18 @@ export function BookForm({
           <Text style={styles.label}>Déjà lu</Text>
           <Switch value={read} onValueChange={setRead} disabled={submitting} />
         </View>
+
+        <View style={[styles.field, styles.switchRow]}>
+          <Text style={styles.label}>Favori</Text>
+          <Switch
+            value={favorite}
+            onValueChange={setFavorite}
+            disabled={submitting}
+          />
+        </View>
       </View>
+
+      {children ? <View style={styles.extra}>{children}</View> : null}
 
       <Pressable
         style={[
@@ -225,5 +240,8 @@ const styles = StyleSheet.create({
   error: {
     color: "#b91c1c",
     fontSize: 13,
+  },
+  extra: {
+    gap: 16,
   },
 });

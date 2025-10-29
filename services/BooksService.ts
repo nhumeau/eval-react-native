@@ -18,9 +18,17 @@ export type BookPayload = {
   editor?: string;
   year?: number | null;
   read?: boolean;
+  favorite?: boolean;
 };
 
-const API_URL = "http://localhost:3000";
+export type Note = {
+  id: string;
+  bookId: string;
+  content: string;
+  dateISO: string;
+};
+
+const API_URL = "https://api-books-kycs.onrender.com";
 
 async function request<T>(
   path: string,
@@ -75,6 +83,22 @@ export async function createBook(payload: BookPayload) {
   });
 }
 
+type NoteResponse = {
+  id: number;
+  bookId: number;
+  content: string;
+  dateISO: string;
+};
+
+function mapNote(response: NoteResponse): Note {
+  return {
+    id: String(response.id),
+    bookId: String(response.bookId),
+    content: response.content,
+    dateISO: response.dateISO,
+  };
+}
+
 export async function updateBook(id: string, payload: BookPayload) {
   return request<Book>(`/books/${id}`, {
     method: "PUT",
@@ -90,4 +114,17 @@ export async function deleteBook(id: string) {
     },
     false
   );
+}
+
+export async function getBookNotes(bookId: string) {
+  const notes = await request<NoteResponse[]>(`/books/${bookId}/notes`);
+  return notes.map(mapNote);
+}
+
+export async function addBookNote(bookId: string, content: string) {
+  const note = await request<NoteResponse>(`/books/${bookId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+  return mapNote(note);
 }

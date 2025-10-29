@@ -12,7 +12,9 @@ export default function NewBook() {
     try {
       setSubmitting(true);
       await createBook(values);
-      router.back();
+      Alert.alert("Succès", "Livre ajouté avec succès.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
     } catch (error) {
       console.error(error);
       Alert.alert("Erreur", (error as Error).message);
