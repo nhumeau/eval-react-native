@@ -170,13 +170,3 @@ export async function addBookNote(bookId: string, content: string) {
   });
   return mapNote(note);
 }
-
-export async function deleteBookNote(bookId: string, noteId: string) {
-  return request<undefined>(
-    `/books/${bookId}/notes/${noteId}`,
-    {
-      method: "DELETE",
-    },
-    false
-  );
-}

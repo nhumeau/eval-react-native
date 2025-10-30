@@ -18,7 +18,6 @@ import {
   Note,
   addBookNote,
   deleteBook,
-  deleteBookNote,
   getBook,
   getBookNotes,
   updateBook,
@@ -247,32 +246,6 @@ export default function BookDetails() {
     }
   }, [book, bookId, noteContent]);
 
-  const handleDeleteNote = useCallback(
-    (noteId: string) => {
-      if (!book) {
-        return;
-      }
-      Alert.alert("Supprimer la note", "Confirmer la suppression de cette note ?", [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteBookNote(book.id, noteId);
-              setNotes((prev) => prev.filter((note) => note.id !== noteId));
-              setStatus("Note supprimee.");
-            } catch (error) {
-              console.error(error);
-              Alert.alert("Erreur", (error as Error).message);
-            }
-          },
-        },
-      ]);
-    },
-    [book]
-  );
-
   const formattedNotes = useMemo(
     () =>
       notes.map((note) => ({
@@ -379,20 +352,7 @@ export default function BookDetails() {
           ) : (
             formattedNotes.map((note) => (
               <View style={styles.note} key={note.id}>
-                <View style={styles.noteHeader}>
-                  <Text style={styles.noteDate}>{note.formattedDate}</Text>
-                  <Pressable
-                    onPress={() => handleDeleteNote(note.id)}
-                    hitSlop={8}
-                    style={({ pressed }) => [
-                      styles.noteDeleteButton,
-                      pressed ? styles.noteDeletePressed : null,
-                    ]}
-                    accessibilityLabel="Supprimer la note"
-                  >
-                    <MaterialIcons name="delete-outline" size={16} color="#b91c1c" />
-                  </Pressable>
-                </View>
+                <Text style={styles.noteDate}>{note.formattedDate}</Text>
                 <Text style={styles.noteContent}>{note.content}</Text>
               </View>
             ))
@@ -629,11 +589,6 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#f8fafc",
   },
-  noteHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   noteDate: {
     fontSize: 12,
     fontWeight: "600",
@@ -642,13 +597,6 @@ const styles = StyleSheet.create({
   noteContent: {
     fontSize: 15,
     color: "#1f2937",
-  },
-  noteDeleteButton: {
-    padding: 4,
-    borderRadius: 12,
-  },
-  noteDeletePressed: {
-    opacity: 0.6,
   },
   noteComposer: {
     gap: 12,

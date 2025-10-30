@@ -6,8 +6,8 @@ import {
   Alert,
   FlatList,
   GestureResponderEvent,
+  Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -44,6 +44,7 @@ export default function Index() {
   const [availableThemes, setAvailableThemes] = useState<string[]>([]);
   const [sort, setSort] = useState<SortField>("title");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const queryParams = useMemo<GetBooksParams>(() => {
     return {
@@ -56,6 +57,16 @@ export default function Index() {
       order,
     };
   }, [filterRead, onlyFavorites, order, search, selectedTheme, sort]);
+
+  const hasActiveFilters = useMemo(
+    () =>
+      filterRead !== "tous" ||
+      onlyFavorites ||
+      selectedTheme !== "tous" ||
+      sort !== "title" ||
+      order !== "asc",
+    [filterRead, onlyFavorites, order, selectedTheme, sort]
+  );
 
   const loadBooks = useCallback(async () => {
     try {
@@ -112,6 +123,10 @@ export default function Index() {
     const timer = setTimeout(() => setStatus(null), 3000);
     return () => clearTimeout(timer);
   }, [status]);
+
+  const handleToggleFilters = useCallback(() => {
+    setFiltersOpen((prev) => !prev);
+  }, []);
 
   const handleToggleRead = useCallback(
     async (book: Book) => {
@@ -244,66 +259,79 @@ export default function Index() {
           pressed ? styles.bookCardPressed : null,
         ]}
       >
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{item.name}</Text>
-          <View style={styles.cardActions}>
-            <Pressable
-              onPress={(event: GestureResponderEvent) => {
-                event.stopPropagation();
-                handleToggleFavorite(item);
-              }}
-              hitSlop={8}
-              accessibilityLabel={
-                item.favorite
-                  ? `Retirer ${item.name} des favoris`
-                  : `Ajouter ${item.name} aux favoris`
-              }
-            >
-              <Ionicons
-                name={item.favorite ? "heart" : "heart-outline"}
-                size={20}
-                color={item.favorite ? "#dc2626" : "#94a3b8"}
-              />
-            </Pressable>
-            <Pressable
-              onPress={(event: GestureResponderEvent) => {
-                event.stopPropagation();
-                handleToggleRead(item);
-              }}
-              style={({ pressed }) => [
-                styles.readBadge,
-                item.read ? styles.readBadgeActive : styles.readBadgeInactive,
-                pressed ? styles.readBadgePressed : null,
-              ]}
-              hitSlop={8}
-              accessibilityLabel={
-                item.read
-                  ? `Marquer ${item.name} comme non lu`
-                  : `Marquer ${item.name} comme lu`
-              }
-            >
-              <MaterialIcons
-                name={item.read ? "check-circle" : "radio-button-unchecked"}
-                size={16}
-                color={item.read ? "#047857" : "#4b5563"}
-              />
-              <Text style={styles.readBadgeText}>
-                {item.read ? "Lu" : "A lire"}
-              </Text>
-            </Pressable>
+        <View style={styles.cardContent}>
+          <View style={styles.cardCoverContainer}>
+            {item.cover ? (
+              <Image source={{ uri: item.cover }} style={styles.cardCoverImage} />
+            ) : (
+              <View style={styles.cardCoverPlaceholder}>
+                <Text style={styles.cardCoverPlaceholderText}>Aucune photo</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.cardInfo}>
+            <Text style={styles.cardTitle}>{item.name}</Text>
+            <View style={styles.cardActionsRow}>
+              <Pressable
+                onPress={(event: GestureResponderEvent) => {
+                  event.stopPropagation();
+                  handleToggleFavorite(item);
+                }}
+                hitSlop={8}
+                accessibilityLabel={
+                  item.favorite
+                    ? `Retirer ${item.name} des favoris`
+                    : `Ajouter ${item.name} aux favoris`
+                }
+              >
+                <Ionicons
+                  name={item.favorite ? "heart" : "heart-outline"}
+                  size={20}
+                  color={item.favorite ? "#dc2626" : "#94a3b8"}
+                />
+              </Pressable>
+              <Pressable
+                onPress={(event: GestureResponderEvent) => {
+                  event.stopPropagation();
+                  handleToggleRead(item);
+                }}
+                style={({ pressed }) => [
+                  styles.readBadge,
+                  item.read ? styles.readBadgeActive : styles.readBadgeInactive,
+                  pressed ? styles.readBadgePressed : null,
+                ]}
+                hitSlop={8}
+                accessibilityLabel={
+                  item.read
+                    ? `Marquer ${item.name} comme non lu`
+                    : `Marquer ${item.name} comme lu`
+                }
+              >
+                <MaterialIcons
+                  name={item.read ? "check-circle" : "radio-button-unchecked"}
+                  size={16}
+                  color={item.read ? "#047857" : "#4b5563"}
+                />
+                <Text style={styles.readBadgeText}>
+                  {item.read ? "Lu" : "A lire"}
+                </Text>
+              </Pressable>
+            </View>
+            <View style={styles.cardMetaStack}>
+              <Text style={styles.cardMeta}>Auteur : {item.author}</Text>
+              {item.editor ? (
+                <Text style={styles.cardMeta}>Editeur : {item.editor}</Text>
+              ) : null}
+              {item.year ? (
+                <Text style={styles.cardMeta}>Publication : {item.year}</Text>
+              ) : null}
+              {item.theme ? (
+                <Text style={styles.cardMeta}>Theme : {item.theme}</Text>
+              ) : null}
+            </View>
+            {renderStars(item)}
           </View>
         </View>
-        <Text style={styles.cardMeta}>Auteur : {item.author}</Text>
-        {item.editor ? (
-          <Text style={styles.cardMeta}>Editeur : {item.editor}</Text>
-        ) : null}
-        {item.year ? (
-          <Text style={styles.cardMeta}>Publication : {item.year}</Text>
-        ) : null}
-        {item.theme ? (
-          <Text style={styles.cardMeta}>Theme : {item.theme}</Text>
-        ) : null}
-        {renderStars(item)}
       </Pressable>
     ),
     [handleToggleFavorite, handleToggleRead, renderStars]
@@ -313,11 +341,7 @@ export default function Index() {
     <View style={styles.screen}>
       <View style={styles.topBar}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}><Ionicons
-                name="book"
-                size={28}
-                color="#2563eb"
-              /> Livres</Text>
+          <Text style={styles.title}>Livres</Text>
           <Link href="/books/new" asChild>
             <Pressable style={styles.addButton}>
               <Text style={styles.addButtonText}>Ajouter</Text>
@@ -331,132 +355,175 @@ export default function Index() {
           placeholderTextColor="#94a3b8"
           style={styles.searchInput}
         />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipScrollContent}
+        <Pressable
+          onPress={handleToggleFilters}
+          style={[
+            styles.filtersToggle,
+            hasActiveFilters ? styles.filtersToggleActive : null,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Afficher ou masquer les filtres"
         >
-          {(["tous", "lus", "non lus"] as const).map((value) => (
-            <Pressable
-              key={value}
-              onPress={() => setFilterRead(value)}
-              style={[
-                styles.filterChip,
-                filterRead === value ? styles.filterChipActive : null,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  filterRead === value ? styles.filterChipTextActive : null,
-                ]}
-              >
-                {value === "tous"
-                  ? "Tous"
-                  : value === "lus"
-                  ? "Deja lus"
-                  : "A lire"}
-              </Text>
-            </Pressable>
-          ))}
-          <Pressable
-            onPress={() => setOnlyFavorites((prev) => !prev)}
-            style={[
-              styles.filterChip,
-              onlyFavorites ? styles.filterChipActive : null,
-            ]}
-          >
+          <View style={styles.filtersToggleContent}>
+            <Ionicons
+              name="options-outline"
+              size={18}
+              color={hasActiveFilters ? "#1d4ed8" : "#1f2937"}
+            />
             <Text
               style={[
-                styles.filterChipText,
-                onlyFavorites ? styles.filterChipTextActive : null,
+                styles.filtersToggleText,
+                hasActiveFilters ? styles.filtersToggleTextActive : null,
               ]}
             >
-              Favoris
+              Filtres et tri
             </Text>
-          </Pressable>
-        </ScrollView>
+            {hasActiveFilters ? <View style={styles.filtersActiveDot} /> : null}
+          </View>
+          <Ionicons
+            name={filtersOpen ? "chevron-up" : "chevron-down"}
+            size={18}
+            color={hasActiveFilters ? "#1d4ed8" : "#1f2937"}
+          />
+        </Pressable>
         {loading && !initialLoading ? (
           <View style={styles.inlineLoader}>
             <ActivityIndicator size="small" color="#2563eb" />
             <Text style={styles.inlineLoaderText}>Mise a jour...</Text>
           </View>
         ) : null}
-        {availableThemes.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipScrollContent}
-          >
-            {["tous", ...availableThemes].map((value) => (
+        {filtersOpen ? (
+          <View style={styles.filterPanel}>
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Etat de lecture</Text>
+              <View style={styles.chipGroup}>
+                {(["tous", "lus", "non lus"] as const).map((value) => (
+                  <Pressable
+                    key={value}
+                    onPress={() => setFilterRead(value)}
+                    style={[
+                      styles.filterChip,
+                      filterRead === value ? styles.filterChipActive : null,
+                    ]}
+                    accessibilityRole="button"
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        filterRead === value ? styles.filterChipTextActive : null,
+                      ]}
+                    >
+                      {value === "tous"
+                        ? "Tous"
+                        : value === "lus"
+                        ? "Deja lus"
+                        : "A lire"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Favoris</Text>
               <Pressable
-                key={value}
-                onPress={() => setSelectedTheme(value)}
+                onPress={() => setOnlyFavorites((prev) => !prev)}
                 style={[
                   styles.filterChip,
-                  selectedTheme === value ? styles.filterChipActive : null,
+                  onlyFavorites ? styles.filterChipActive : null,
                 ]}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: onlyFavorites }}
               >
                 <Text
                   style={[
                     styles.filterChipText,
-                    selectedTheme === value ? styles.filterChipTextActive : null,
+                    onlyFavorites ? styles.filterChipTextActive : null,
                   ]}
                 >
-                  {value === "tous" ? "Tous les themes" : value}
+                  Afficher uniquement les favoris
                 </Text>
               </Pressable>
-            ))}
-          </ScrollView>
+            </View>
+            {availableThemes.length > 0 ? (
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Theme</Text>
+                <View style={styles.chipGroup}>
+                  {["tous", ...availableThemes].map((value) => (
+                    <Pressable
+                      key={value}
+                      onPress={() => setSelectedTheme(value)}
+                      style={[
+                        styles.filterChip,
+                        selectedTheme === value ? styles.filterChipActive : null,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          selectedTheme === value
+                            ? styles.filterChipTextActive
+                            : null,
+                        ]}
+                      >
+                        {value === "tous" ? "Tous les themes" : value}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Tri</Text>
+              <View style={styles.sortControls}>
+                <Pressable
+                  onPress={() =>
+                    setOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+                  }
+                  style={[
+                    styles.orderButton,
+                    order === "desc" ? styles.orderButtonActive : null,
+                  ]}
+                  accessibilityRole="button"
+                >
+                  <MaterialIcons
+                    name={order === "asc" ? "arrow-upward" : "arrow-downward"}
+                    size={16}
+                    color={order === "desc" ? "#fff" : "#1f2937"}
+                  />
+                  <Text
+                    style={[
+                      styles.orderButtonText,
+                      order === "desc" ? styles.orderButtonTextActive : null,
+                    ]}
+                  >
+                    {order === "asc" ? "Ordre croissant" : "Ordre decroissant"}
+                  </Text>
+                </Pressable>
+                <View style={styles.chipGroup}>
+                  {SORT_OPTIONS.map(({ value, label }) => (
+                    <Pressable
+                      key={value}
+                      onPress={() => setSort(value)}
+                      style={[
+                        styles.sortButton,
+                        sort === value ? styles.sortButtonActive : null,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.sortButtonText,
+                          sort === value ? styles.sortButtonTextActive : null,
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </View>
         ) : null}
-        <View style={styles.sortHeader}>
-          <Pressable
-            onPress={() => setOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
-            style={[
-              styles.orderButton,
-              order === "desc" ? styles.orderButtonActive : null,
-            ]}
-          >
-            <MaterialIcons
-              name={order === "asc" ? "arrow-upward" : "arrow-downward"}
-              size={16}
-              color={order === "desc" ? "#fff" : "#1f2937"}
-            />
-            <Text
-              style={[
-                styles.orderButtonText,
-                order === "desc" ? styles.orderButtonTextActive : null,
-              ]}
-            >
-              {order === "asc" ? "Ordre croissant" : "Ordre decroissant"}
-            </Text>
-          </Pressable>
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipScrollContent}
-        >
-          {SORT_OPTIONS.map(({ value, label }) => (
-            <Pressable
-              key={value}
-              onPress={() => setSort(value)}
-              style={[
-                styles.sortButton,
-                sort === value ? styles.sortButtonActive : null,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.sortButtonText,
-                  sort === value ? styles.sortButtonTextActive : null,
-                ]}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
       </View>
       <FlatList
         data={books}
@@ -529,9 +596,62 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     fontSize: 15,
   },
-  chipScrollContent: {
+  filtersToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  filtersToggleActive: {
+    borderColor: "#2563eb",
+    backgroundColor: "#eff6ff",
+  },
+  filtersToggleContent: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
-    paddingVertical: 4,
+    flex: 1,
+  },
+  filtersToggleText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1f2937",
+    flex: 1,
+  },
+  filtersToggleTextActive: {
+    color: "#1d4ed8",
+  },
+  filtersActiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#2563eb",
+  },
+  filterPanel: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    gap: 16,
+  },
+  filterSection: {
+    gap: 8,
+  },
+  filterSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1f2937",
+  },
+  chipGroup: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
   filterChip: {
     paddingHorizontal: 14,
@@ -562,9 +682,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#475569",
   },
-  sortHeader: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
+  sortControls: {
+    gap: 12,
   },
   orderButton: {
     flexDirection: "row",
@@ -628,22 +747,52 @@ const styles = StyleSheet.create({
   bookCardPressed: {
     opacity: 0.9,
   },
-  cardHeader: {
+  cardContent: {
     flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 16,
+  },
+  cardCoverContainer: {
+    width: 76,
+  },
+  cardCoverImage: {
+    width: 76,
+    height: 110,
+    borderRadius: 12,
+    backgroundColor: "#e2e8f0",
+  },
+  cardCoverPlaceholder: {
+    width: 76,
+    height: 110,
+    borderRadius: 12,
+    backgroundColor: "#e2e8f0",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  cardCoverPlaceholderText: {
+    color: "#475569",
+    fontSize: 11,
+    textAlign: "center",
+  },
+  cardInfo: {
+    flex: 1,
+    gap: 10,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#111827",
     flex: 1,
-    paddingRight: 12,
+    flexWrap: "wrap",
   },
-  cardActions: {
+  cardActionsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  cardMetaStack: {
+    gap: 4,
   },
   cardMeta: {
     fontSize: 14,

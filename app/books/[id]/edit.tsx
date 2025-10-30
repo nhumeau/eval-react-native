@@ -1,4 +1,3 @@
-import { MaterialIcons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -9,7 +8,6 @@ import {
   BookPayload,
   Note,
   addBookNote,
-  deleteBookNote,
   getBook,
   getBookNotes,
   updateBook,
@@ -71,7 +69,7 @@ export default function EditBook() {
     try {
       setSubmitting(true);
       await updateBook(bookId, values);
-      setStatus("Livre mis à jour avec succès.");
+      setStatus("Livre mis a jour avec succes.");
       router.back();
     } catch (error) {
       console.error(error);
@@ -95,7 +93,7 @@ export default function EditBook() {
       const created = await addBookNote(bookId, trimmed);
       setNotes((prev) => [created, ...prev]);
       setNoteContent("");
-      setStatus("Note ajoutée avec succès.");
+      setStatus("Note ajoutee avec succes.");
     } catch (error) {
       console.error(error);
       Alert.alert("Erreur", (error as Error).message);
@@ -103,32 +101,6 @@ export default function EditBook() {
       setNoteSubmitting(false);
     }
   }, [bookId, noteContent]);
-
-  const handleDeleteNote = useCallback(
-    (noteId: string) => {
-      if (!bookId) {
-        return;
-      }
-      Alert.alert("Supprimer la note", "Confirmer la suppression de cette note ?", [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteBookNote(bookId, noteId);
-              setNotes((prev) => prev.filter((note) => note.id !== noteId));
-              setStatus("Note supprimee.");
-            } catch (error) {
-              console.error(error);
-              Alert.alert("Erreur", (error as Error).message);
-            }
-          },
-        },
-      ]);
-    },
-    [bookId]
-  );
 
   const formattedNotes = useMemo(
     () =>
@@ -183,20 +155,7 @@ export default function EditBook() {
           ) : (
             formattedNotes.map((note) => (
               <View style={styles.note} key={note.id}>
-                <View style={styles.noteHeader}>
-                  <Text style={styles.noteDate}>{note.formattedDate}</Text>
-                  <Pressable
-                    onPress={() => handleDeleteNote(note.id)}
-                    style={({ pressed }) => [
-                      styles.noteDeleteButton,
-                      pressed ? styles.noteDeletePressed : null,
-                    ]}
-                    hitSlop={8}
-                    accessibilityLabel="Supprimer la note"
-                  >
-                    <MaterialIcons name="delete-outline" size={16} color="#b91c1c" />
-                  </Pressable>
-                </View>
+                <Text style={styles.noteDate}>{note.formattedDate}</Text>
                 <Text style={styles.noteContent}>{note.content}</Text>
               </View>
             ))
@@ -280,11 +239,6 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#f8fafc",
   },
-  noteHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   noteDate: {
     fontSize: 12,
     fontWeight: "600",
@@ -293,13 +247,6 @@ const styles = StyleSheet.create({
   noteContent: {
     fontSize: 15,
     color: "#1f2937",
-  },
-  noteDeleteButton: {
-    padding: 4,
-    borderRadius: 12,
-  },
-  noteDeletePressed: {
-    opacity: 0.6,
   },
   noteComposer: {
     gap: 12,
