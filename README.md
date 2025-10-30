@@ -59,4 +59,4 @@ npx expo start
 
 ---
 
-Projet realise par Nathan Humeau dans le cadre du Mastere Developpement Full-Stack 1ere Annee - Sup de Vinci.
+Projet réalisé par Nathan HUMEAU dans le cadre du Mastère Développement Full-Stack 1ère Annee - Sup de Vinci.
