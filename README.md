@@ -1,50 +1,62 @@
-# Welcome to your Expo app 👋
+# Liréo - Gestion de bibliothèque mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Ce dépôt héberge le projet "Liréo", réalisé dans le cadre de l’évaluation du module React Native du Mastère Développement Full-Stack 1re Année (Sup de Vinci) dirigé par Monsieur DESCHAMPS. L’application permet de gérer une bibliothèque personnelle depuis un terminal mobile avec synchronisation distante et mode dégradé hors ligne.
 
-## Get started
+## Contexte pédagogique
+- Sujet d’évaluation pour valider les compétences du cours sur React Native et l’écosystème Expo.
+- Mise en situation professionnelle : conception d’une application React Native (front Expo / back REST distant).
 
-1. Install dependencies
+## Aperçu fonctionnel
+- Consultation d’une liste de livres avec recherche textuelle, filtres (lus, favoris, thème) et tri multi-critères.
+- Création et édition de fiches de lecture (titre, auteur, éditeur, année, lecture, favori, note sur 5, visuel de couverture).
+- Consultation détaillée avec gestion des favoris, notes personnelles, états de lecture et suppression.
+- Tableau de bord statistiques (répartition lus/non lus/favoris, note moyenne).
+- Récupération contextuelle du nombre d’éditions via l’API publique OpenLibrary.
+- Mode hors ligne : lecture du cache local lorsque l’API n’est pas disponible et synchronisation lors du retour réseau.
 
-   ```bash
-   npm install
-   ```
+## Architecture et choix techniques
+- Expo Router pour une navigation stack basée sur la structure du dossier `app/`.
+- Séparation claire entre UI (screens et components), logique métier (services) et stockage (AsyncStorage).
+- Services TypeScript (`BooksService.ts`, `OpenLibraryService.ts`) centralisant les requêtes API, la construction d’URL et la gestion des erreurs.
+- Cache local `AsyncStorage` (`OfflineStorage.ts`) pour gérer les données hors ligne et activer un mode dégradé clair pour l’utilisateur.
+- Utilisation de `expo-network` pour détecter la connectivité au réseau.
+- Composants réutilisables (`BookForm.tsx`) pour uniformiser les formulaires et limiter la duplication de la logique de validation.
+- Visualisations de statistiques via des librairies de graphiques avec `react-native-chart-kit` et `react-native-svg`.
 
-2. Start the app
+## Langages / outils / frameworks
+- TypeScript
+- Expo
+- AsyncStorage pour le cache local
+- Expo Image Picker pour la sélection de couverture
+- React Native Chart Kit pour la visualisation des statistiques via des graphiques
+- OpenLibrary API (consultation publique) et API Back-End Local (`https://github.com/MaDesOcr/API-BOOKS`)
 
-   ```bash
-   npx expo start
-   ```
+## Prérequis
+- Node.js
+- npm
+- Expo CLI (`npx expo`)
+- Application Expo Go
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+## Installation
 ```bash
-npm run reset-project
+git clone https://github.com/nhumeau/eval-react-native
+cd eval-react-native-nathan-humeau
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Démarrage
+```bash
+npx expo start
+```
+- Accès via le web sur l'URL : `http://localhost:8081`
+- Scanner le QR code via l'application Expo Go pour un test sur mobile physique.
 
-## Learn more
+## Normes et bonnes pratiques adoptées
+- Convention de nommage en anglais côté code.
+- Gestion des effets via `useCallback`, `useMemo` et `useFocusEffect` pour optimiser les re-render et recharger les données au moment voulu.
+- Retours utilisateur systématiques: loaders, bannière d'information, alertes, messages visuels sur les boutons.
+- Architecture modulaire permettant de faire évoluer l'application (ajout d'autres modules ou services) sans refonte majeure.
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Projet realise par Nathan Humeau dans le cadre du Mastere Developpement Full-Stack 1ere Annee - Sup de Vinci.
