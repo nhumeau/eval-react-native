@@ -1,4 +1,5 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import * as Network from "expo-network";
 import { Link, router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -21,6 +22,7 @@ import {
   getBooks,
   updateBook,
 } from "../services/BooksService";
+import { loadBooksCache, saveBooksCache } from "../services/OfflineStorage";
 
 type FilterRead = "tous" | "lus" | "non lus";
 
@@ -45,6 +47,11 @@ export default function Index() {
   const [sort, setSort] = useState<SortField>("title");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [offlineMode, setOfflineMode] = useState(false);
+  const [lastSync, setLastSync] = useState<number | null>(null);
+
+  const offlineRef = useRef(false);
+  const hasLocalCacheRef = useRef(false);
 
   const queryParams = useMemo<GetBooksParams>(() => {
     return {
@@ -68,43 +75,141 @@ export default function Index() {
     [filterRead, onlyFavorites, order, selectedTheme, sort]
   );
 
+  const lastSyncLabel = useMemo(() => {
+    if (!lastSync) {
+      return null;
+    }
+    const date = new Date(lastSync);
+    const dateText = date.toLocaleDateString("fr-FR");
+    const timeText = date.toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return `${dateText} ${timeText}`;
+  }, [lastSync]);
+
+  const syncThemesFromData = useCallback((data: Book[]) => {
+    setAvailableThemes((prev) => {
+      const combined = new Set(prev);
+      data.forEach((item) => {
+        if (item.theme) {
+          combined.add(item.theme);
+        }
+      });
+      const next = Array.from(combined).sort((a, b) =>
+        a.localeCompare(b, "fr")
+      );
+      if (
+        next.length === prev.length &&
+        next.every((value, index) => value === prev[index])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
   const loadBooks = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getBooks(queryParams);
       setBooks(data);
-      setAvailableThemes((prev) => {
-        const combined = new Set(prev);
-        data.forEach((item) => {
-          if (item.theme) {
-            combined.add(item.theme);
-          }
-        });
-        const next = Array.from(combined).sort((a, b) =>
-          a.localeCompare(b, "fr")
-        );
-        if (
-          next.length === prev.length &&
-          next.every((value, index) => value === prev[index])
-        ) {
-          return prev;
-        }
-        return next;
-      });
+      syncThemesFromData(data);
+      const savedAt = await saveBooksCache(data);
+      setLastSync(savedAt);
+      hasLocalCacheRef.current = true;
+      setOfflineMode(false);
+      offlineRef.current = false;
     } catch (error) {
       console.error(error);
-      Alert.alert("Erreur", (error as Error).message);
+      if (hasLocalCacheRef.current) {
+        if (!offlineRef.current) {
+          setStatus("Connexion indisponible. Affichage des donnees locales.");
+        }
+        setOfflineMode(true);
+        offlineRef.current = true;
+      } else {
+        Alert.alert("Erreur", (error as Error).message);
+      }
     } finally {
       setLoading(false);
       setInitialLoading(false);
     }
-  }, [queryParams]);
+  }, [queryParams, syncThemesFromData]);
+
+  useEffect(() => {
+    let canceled = false;
+    (async () => {
+      try {
+        const cached = await loadBooksCache();
+        if (!cached || canceled) {
+          return;
+        }
+        hasLocalCacheRef.current = true;
+        setBooks(cached.books);
+        syncThemesFromData(cached.books);
+        setLastSync(cached.savedAt);
+        setLoading(false);
+        setInitialLoading(false);
+      } catch (error) {
+        console.error("Erreur lors du chargement local des livres", error);
+      }
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, [syncThemesFromData]);
 
   useFocusEffect(
     useCallback(() => {
       loadBooks();
     }, [loadBooks])
   );
+
+  useEffect(() => {
+    offlineRef.current = offlineMode;
+  }, [offlineMode]);
+
+  useEffect(() => {
+    let mounted = true;
+    const subscription = Network.addNetworkStateListener((state) => {
+      const isOnline =
+        Boolean(state.isConnected) && state.isInternetReachable !== false;
+      if (isOnline) {
+        const wasOffline = offlineRef.current;
+        setOfflineMode(false);
+        offlineRef.current = false;
+        if (mounted && wasOffline) {
+          loadBooks();
+        }
+      } else {
+        setOfflineMode(true);
+        offlineRef.current = true;
+      }
+    });
+
+    (async () => {
+      try {
+        const state = await Network.getNetworkStateAsync();
+        if (!mounted) {
+          return;
+        }
+        const isOnline =
+          Boolean(state.isConnected) && state.isInternetReachable !== false;
+        if (!isOnline && hasLocalCacheRef.current) {
+          setOfflineMode(true);
+          offlineRef.current = true;
+        }
+      } catch (error) {
+        console.error("Erreur de detection reseau", error);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [loadBooks]);
 
   const filtersReadyRef = useRef(false);
 
@@ -141,9 +246,17 @@ export default function Index() {
           rating: book.rating ?? null,
           cover: book.cover ?? null,
         });
-        setBooks((prev) =>
-          prev.map((item) => (item.id === book.id ? updated : item))
-        );
+        setBooks((prev) => {
+          const next = prev.map((item) => (item.id === book.id ? updated : item));
+          syncThemesFromData(next);
+          void saveBooksCache(next).then((savedAt) => {
+            setLastSync(savedAt);
+            hasLocalCacheRef.current = true;
+          });
+          return next;
+        });
+        setOfflineMode(false);
+        offlineRef.current = false;
         setStatus(
           book.read
             ? `Livre marque comme non lu : ${book.name}`
@@ -151,10 +264,12 @@ export default function Index() {
         );
       } catch (error) {
         console.error(error);
+        setOfflineMode(true);
+        offlineRef.current = true;
         Alert.alert("Erreur", (error as Error).message);
       }
     },
-    []
+    [syncThemesFromData]
   );
 
   const handleToggleFavorite = useCallback(
@@ -170,9 +285,17 @@ export default function Index() {
           rating: book.rating ?? null,
           cover: book.cover ?? null,
         });
-        setBooks((prev) =>
-          prev.map((item) => (item.id === book.id ? updated : item))
-        );
+        setBooks((prev) => {
+          const next = prev.map((item) => (item.id === book.id ? updated : item));
+          syncThemesFromData(next);
+          void saveBooksCache(next).then((savedAt) => {
+            setLastSync(savedAt);
+            hasLocalCacheRef.current = true;
+          });
+          return next;
+        });
+        setOfflineMode(false);
+        offlineRef.current = false;
         setStatus(
           !book.favorite
             ? `Livre ajoute aux favoris : ${book.name}`
@@ -180,10 +303,12 @@ export default function Index() {
         );
       } catch (error) {
         console.error(error);
+        setOfflineMode(true);
+        offlineRef.current = true;
         Alert.alert("Erreur", (error as Error).message);
       }
     },
-    []
+    [syncThemesFromData]
   );
 
   const handleRate = useCallback(
@@ -200,18 +325,28 @@ export default function Index() {
           rating: bounded,
           cover: book.cover ?? null,
         });
-        setBooks((prev) =>
-          prev.map((item) => (item.id === book.id ? updated : item))
-        );
+        setBooks((prev) => {
+          const next = prev.map((item) => (item.id === book.id ? updated : item));
+          syncThemesFromData(next);
+          void saveBooksCache(next).then((savedAt) => {
+            setLastSync(savedAt);
+            hasLocalCacheRef.current = true;
+          });
+          return next;
+        });
+        setOfflineMode(false);
+        offlineRef.current = false;
         setStatus(
           `Note mise a jour : ${bounded} etoile(s) pour ${book.name}`
         );
       } catch (error) {
         console.error(error);
+        setOfflineMode(true);
+        offlineRef.current = true;
         Alert.alert("Erreur", (error as Error).message);
       }
     },
-    []
+    [syncThemesFromData]
   );
 
   const renderStars = useCallback(
@@ -340,19 +475,47 @@ export default function Index() {
   return (
     <View style={styles.screen}>
       <View style={styles.topBar}>
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>Livres</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Livres</Text>
+        <View style={styles.headerActions}>
+          <Link href="/stats" asChild>
+            <Pressable style={styles.statsButton}>
+              <MaterialIcons name="insert-chart" size={16} color="#2563eb" />
+              <Text style={styles.statsButtonText}>Statistiques</Text>
+            </Pressable>
+          </Link>
           <Link href="/books/new" asChild>
             <Pressable style={styles.addButton}>
               <Text style={styles.addButtonText}>Ajouter</Text>
             </Pressable>
           </Link>
         </View>
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Rechercher par titre ou auteur"
-          placeholderTextColor="#94a3b8"
+      </View>
+      {offlineMode ? (
+        <View style={styles.offlineBanner}>
+          <MaterialIcons name="wifi-off" size={18} color="#b91c1c" />
+          <View style={styles.offlineTextGroup}>
+            <Text style={styles.offlineTitle}>Mode hors ligne</Text>
+            <Text style={styles.offlineSubtitle}>
+              {lastSyncLabel
+                ? `Derniere synchro : ${lastSyncLabel}`
+                : "Affichage des donnees en cache."}
+            </Text>
+          </View>
+        </View>
+      ) : lastSyncLabel ? (
+        <View style={styles.syncNotice}>
+          <MaterialIcons name="cloud-done" size={18} color="#2563eb" />
+          <Text style={styles.syncNoticeText}>
+            Derniere mise a jour : {lastSyncLabel}
+          </Text>
+        </View>
+      ) : null}
+      <TextInput
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Rechercher par titre ou auteur"
+        placeholderTextColor="#94a3b8"
           style={styles.searchInput}
         />
         <Pressable
@@ -572,6 +735,50 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#f87171",
+    backgroundColor: "#fee2e2",
+    padding: 12,
+  },
+  offlineTextGroup: {
+    flex: 1,
+    gap: 4,
+  },
+  offlineTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#b91c1c",
+  },
+  offlineSubtitle: {
+    fontSize: 13,
+    color: "#7f1d1d",
+  },
+  syncNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  syncNoticeText: {
+    fontSize: 13,
+    color: "#1d4ed8",
+    flex: 1,
+  },
   title: {
     fontSize: 28,
     fontWeight: "700",
@@ -583,8 +790,23 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#2563eb",
   },
+  statsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#2563eb",
+    backgroundColor: "#fff",
+  },
   addButtonText: {
     color: "#fff",
+    fontWeight: "600",
+  },
+  statsButtonText: {
+    color: "#2563eb",
     fontWeight: "600",
   },
   searchInput: {

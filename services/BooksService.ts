@@ -30,6 +30,14 @@ export type Note = {
   dateISO: string;
 };
 
+export type BooksStats = {
+  totalBooks: number;
+  readCount: number;
+  unreadCount: number;
+  favoritesCount: number;
+  averageRating: number | null;
+};
+
 export type SortField = "title" | "author" | "theme" | "year" | "rating";
 export type SortOrder = "asc" | "desc";
 
@@ -156,6 +164,10 @@ export async function deleteBook(id: string) {
     },
     false
   );
+}
+
+export async function getStats() {
+  return request<BooksStats>("/stats");
 }
 
 export async function getBookNotes(bookId: string) {

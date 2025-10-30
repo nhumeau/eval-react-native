@@ -1,5 +1,5 @@
+﻿import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { ReactNode, useCallback, useMemo, useState } from "react";
 import {
   Alert,
@@ -118,7 +118,7 @@ export function BookForm({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [3, 4],
         quality: 0.85,

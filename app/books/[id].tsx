@@ -22,6 +22,7 @@ import {
   getBookNotes,
   updateBook,
 } from "../../services/BooksService";
+import { fetchEditionCountByTitle } from "../../services/OpenLibraryService";
 
 export default function BookDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,6 +34,9 @@ export default function BookDetails() {
   const [noteContent, setNoteContent] = useState("");
   const [noteSubmitting, setNoteSubmitting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [openLibraryCount, setOpenLibraryCount] = useState<number | null>(null);
+  const [openLibraryLoading, setOpenLibraryLoading] = useState(false);
+  const [openLibraryError, setOpenLibraryError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!bookId) {
@@ -70,6 +74,44 @@ export default function BookDetails() {
     const timer = setTimeout(() => setStatus(null), 3000);
     return () => clearTimeout(timer);
   }, [status]);
+
+  useEffect(() => {
+    const title = book?.name?.trim();
+    if (!title) {
+      setOpenLibraryCount(null);
+      setOpenLibraryError(null);
+      return;
+    }
+
+    let canceled = false;
+    const loadOpenLibrary = async () => {
+      try {
+        setOpenLibraryLoading(true);
+        setOpenLibraryError(null);
+        const count = await fetchEditionCountByTitle(title);
+        if (canceled) {
+          return;
+        }
+        setOpenLibraryCount(count);
+      } catch (error) {
+        console.error(error);
+        if (!canceled) {
+          setOpenLibraryError("Informations OpenLibrary indisponibles.");
+          setOpenLibraryCount(null);
+        }
+      } finally {
+        if (!canceled) {
+          setOpenLibraryLoading(false);
+        }
+      }
+    };
+
+    loadOpenLibrary();
+
+    return () => {
+      canceled = true;
+    };
+  }, [book?.name]);
 
   const handleToggleFavorite = useCallback(async () => {
     if (!book) {
@@ -259,6 +301,19 @@ export default function BookDetails() {
     [notes]
   );
 
+  const openLibraryMessage = useMemo(() => {
+    if (openLibraryLoading) {
+      return "Recherche des editions...";
+    }
+    if (openLibraryError) {
+      return openLibraryError;
+    }
+    if (typeof openLibraryCount === "number") {
+      return `Nombre d'editions referencees : ${openLibraryCount}`;
+    }
+    return "Aucune edition referencee pour le moment.";
+  }, [openLibraryCount, openLibraryError, openLibraryLoading]);
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -341,6 +396,21 @@ export default function BookDetails() {
               {book.year ? (
                 <Text style={styles.meta}>Publication : {book.year}</Text>
               ) : null}
+              <View style={styles.openLibraryBox}>
+                <MaterialIcons name="library-books" size={20} color="#1d4ed8" />
+                <View style={styles.openLibraryTexts}>
+                  <Text style={styles.openLibraryTitle}>OpenLibrary</Text>
+                  <Text
+                    style={
+                      openLibraryError
+                        ? styles.openLibraryErrorText
+                        : styles.openLibrarySubtitle
+                    }
+                  >
+                    {openLibraryMessage}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
         </View>
@@ -473,6 +543,34 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 10,
     alignSelf: "stretch",
+  },
+  openLibraryBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    padding: 12,
+    marginTop: 12,
+  },
+  openLibraryTexts: {
+    flex: 1,
+    gap: 4,
+  },
+  openLibraryTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1d4ed8",
+  },
+  openLibrarySubtitle: {
+    fontSize: 13,
+    color: "#1e3a8a",
+  },
+  openLibraryErrorText: {
+    fontSize: 13,
+    color: "#b91c1c",
   },
   titleBlock: {
     gap: 12,
