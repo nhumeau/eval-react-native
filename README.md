@@ -29,7 +29,7 @@ Ce dépôt héberge le projet "Liréo", réalisé dans le cadre de l’évaluati
 - AsyncStorage pour le cache local
 - Expo Image Picker pour la sélection de couverture
 - React Native Chart Kit pour la visualisation des statistiques via des graphiques
-- OpenLibrary API (consultation publique) et API Back-End Local (`https://github.com/MaDesOcr/API-BOOKS`)
+- OpenLibrary API (consultation publique) et API Back-End DIstant (`https://api-books-kycs.onrender.com`) hébergée sur `https://render.com`.
 
 ## Prérequis
 - Node.js
